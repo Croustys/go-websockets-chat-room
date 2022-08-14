@@ -11,13 +11,18 @@ import (
 type ChatMessage struct {
 	Username string `json:"username"`
 	Text     string `json:"text"`
+	Target   User   `json:",omitempty"`
 }
 type broadcastMessage struct {
 	ChatMessage ChatMessage
 	Ws          *websocket.Conn
 }
+type User struct {
+	Username string
+}
 
 var clients = make(map[*websocket.Conn]bool)
+var privateClients = make(map[*websocket.Conn]User)
 var broadcaster = make(chan broadcastMessage)
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -41,6 +46,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			delete(clients, ws)
 			break
+		}
+		if msg.Target.Username != "" {
+			for socket, client := range privateClients {
+				if client.Username == msg.Target.Username {
+					messageClient(socket, msg)
+					return
+				}
+			}
 		}
 		broadcastMessage := broadcastMessage{ChatMessage: msg, Ws: ws}
 		// send new message to the channel
